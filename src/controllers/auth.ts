@@ -60,36 +60,36 @@ export function createLoginHandler({
   generateToken,
 }: LoginDependencies) {
   return async function login(request: Request, response: Response) {
-  const validation = loginAuth.safeParse(request.body);
+    const validation = loginAuth.safeParse(request.body);
 
-  if (validation.success === false) {
-    return response.status(422).json({
-      message: "Validation failed.",
-      errors: validation.error.issues.map(({ path, message }) => ({ path, message })),
-    });
-  }
-
-  const { email, password } = validation.data;
-  try {
-    const user = await findUserByEmail(email);
-
-    if (!user) {
-      return response.status(401).json({ message: "Invalid email or password." });
+    if (validation.success === false) {
+      return response.status(422).json({
+        message: "Validation failed.",
+        errors: validation.error.issues.map(({ path, message }) => ({ path, message })),
+      });
     }
 
-    const validated = await verifyPassword(user.password_hash, password);
+    const { email, password } = validation.data;
+    try {
+      const user = await findUserByEmail(email.trim().toLowerCase());
 
-    if (!validated) {
-      return response.status(401).json({ message: "Invalid email or password." });
+      if (!user) {
+        return response.status(401).json({ message: "Invalid email or password." });
+      }
+
+      const validated = await verifyPassword(user.password_hash, password);
+
+      if (!validated) {
+        return response.status(401).json({ message: "Invalid email or password." });
+      }
+
+      const token = generateToken({ sub: user.id, name: user.name });
+
+      return response.status(200).json({ message: "User logged successfully.", token });
+    } catch (error) {
+      console.error("Failed to log in", error);
+      return response.status(500).json({ message: "Internal server error." });
     }
-
-    const token = generateToken({ sub: user.id, name: user.name });
-
-    return response.status(200).json({ message: "User logged successfully.", token });
-  } catch (error) {
-    console.error("Failed to log in", error);
-    return response.status(500).json({ message: "Internal server error." });
-  }
   };
 }
 

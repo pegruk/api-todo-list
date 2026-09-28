@@ -97,7 +97,7 @@ test("returns validation errors when required fields are invalid", async () => {
     message: "Validation failed.",
     errors: [
       { path: ["email"], message: "Invalid email" },
-      { path: ["password"], message: "String must contain at least 8 character(s)" },
+      { path: ["password"], message: "Password must be at least 8 characters" },
     ],
   });
 });
