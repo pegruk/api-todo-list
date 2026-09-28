@@ -27,3 +27,13 @@ export const createUser = async (data: CreateDataUser): Promise<CreatedUser> => 
 
   return user;
 };
+
+export const findUserByEmail = async (email: string) => {
+  const result = await pool.query(
+    `SELECT id, name, email, password_hash FROM users WHERE email = $1`,
+    [email.trim().toLowerCase()],
+  );
+
+  return result.rows[0] ?? null;
+}
+
