@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Request, Response } from "express";
 
-import { createLoginHandler } from "../src/controllers/auth.js";
+import { createLoginHandler, createRegisterHandler } from "../src/controllers/auth.js";
 
 type LoginBody = { email?: unknown; password?: unknown };
 
@@ -63,7 +63,7 @@ test("returns a token for valid credentials and normalizes the email", async () 
   );
 
   assert.equal(result.statusCode, 200);
-  assert.deepEqual(result.body, { message: "User logged successfully.", token: "signed-token" });
+  assert.deepEqual(result.body, { token: "signed-token" });
   assert.equal(lookedUpEmail, "ada@example.com");
   assert.deepEqual(verified, ["argon-hash", "correct horse"]);
   assert.deepEqual(tokenPayload, { sub: "42", name: "Ada" });
@@ -117,4 +117,53 @@ test("hides internal exception details from the response", async () => {
   } finally {
     console.error = originalConsoleError;
   }
+});
+
+test("registers with a normalized email, a password hash, and a token", async () => {
+  let persisted: { name: string; email: string; hashedPassword: string } | undefined;
+  let signedPayload: object | undefined;
+  let statusCode = 0;
+  let responseBody: unknown;
+  const handler = createRegisterHandler({
+    createUser: async (data) => {
+      persisted = data;
+      return { id: "42", name: data.name };
+    },
+    findUserByEmail: async () => null,
+    hashPassword: async (password) => `argon:${password}`,
+    verifyPassword: async () => false,
+    generateToken: (payload) => { signedPayload = payload; return "register-token"; },
+  });
+  const response = {
+    status(code: number) { statusCode = code; return this; },
+    json(body: unknown) { responseBody = body; return this; },
+  } as unknown as Response;
+
+  await handler({ body: { name: "Ada", email: " ADA@EXAMPLE.COM ", password: "correct horse" } } as Request, response);
+
+  assert.equal(statusCode, 201);
+  assert.deepEqual(responseBody, { token: "register-token" });
+  assert.deepEqual(persisted, { name: "Ada", email: "ada@example.com", hashedPassword: "argon:correct horse" });
+  assert.deepEqual(signedPayload, { sub: "42", name: "Ada" });
+});
+
+test("returns conflict for a duplicate registration email", async () => {
+  let statusCode = 0;
+  let responseBody: unknown;
+  const duplicateError = Object.assign(new Error("duplicate"), { code: "23505" });
+  const handler = createRegisterHandler({
+    createUser: async () => { throw duplicateError; },
+    findUserByEmail: async () => null,
+    hashPassword: async () => "argon:hash",
+    verifyPassword: async () => false,
+    generateToken: () => "token",
+  });
+  const response = {
+    status(code: number) { statusCode = code; return this; },
+    json(body: unknown) { responseBody = body; return this; },
+  } as unknown as Response;
+
+  await handler({ body: { name: "Ada", email: "ada@example.com", password: "correct horse" } } as Request, response);
+  assert.equal(statusCode, 409);
+  assert.deepEqual(responseBody, { message: "Email is already registered." });
 });
